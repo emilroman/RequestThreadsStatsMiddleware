@@ -6,26 +6,30 @@ namespace RequestThreadsStatsMiddleware
 {
     public static class Middleware
     {
-        private static Thread _monitoringThread = new Thread(ShowThreadStatistics) { IsBackground = true };
-        private static int _requests;
-        private static int _appThreads;
-        private static string _appUrl;
+        private static readonly Thread MonitoringThread = new Thread(ShowThreadStatistics) { IsBackground = true };
+        private static int requests;
+        private static int appThreads;
 
-        private const int _defaultAppThreads = 10;
-        private const int _defaultCompletionPortThreads = 100;
+        private const int DefaultAppThreads = 10;
+        private const int DefaultCompletionPortThreads = 100;
 
-        public static IApplicationBuilder UseRequestThreading(this IApplicationBuilder app, string appUrl, int appThreads = _defaultAppThreads)
+        /// <summary>
+        /// Middleware that displays stats about the request threadpool usage to the console
+        /// </summary>
+        /// <param name="app"></param>
+        /// <param name="applicationThreads">The number of threads for the application (defaults to 10)</param>
+        /// <returns></returns>
+        public static IApplicationBuilder UseRequestThreading(this IApplicationBuilder app, int applicationThreads = DefaultAppThreads)
         {
-            _appThreads = appThreads;
-            _appUrl = appUrl;
+            appThreads = applicationThreads;
 
-            _monitoringThread.Start();
+            MonitoringThread.Start();
 
             app.Use(async (context, next) =>
             {
-                Interlocked.Increment(ref _requests);
+                Interlocked.Increment(ref requests);
                 await next();
-                Interlocked.Decrement(ref _requests);
+                Interlocked.Decrement(ref requests);
             });
 
             return app;
@@ -33,14 +37,14 @@ namespace RequestThreadsStatsMiddleware
 
         private static void ShowThreadStatistics(object obj)
         {
-            ThreadPool.SetMaxThreads(_appThreads, _defaultCompletionPortThreads);
+            ThreadPool.SetMaxThreads(appThreads, DefaultCompletionPortThreads);
 
             while (true)
             {
                 ThreadPool.GetAvailableThreads(out var workerThreads, out var _);
                 ThreadPool.GetMaxThreads(out var maxThreads, out int _);
 
-                Console.WriteLine($"Available: {workerThreads}, Active: {maxThreads - workerThreads}, Max: {maxThreads}, Requests: {_requests}");
+                Console.WriteLine($"Available: {workerThreads}, Active: {maxThreads - workerThreads}, Max: {maxThreads}, Requests: {requests}");
 
                 Thread.Sleep(1000);
             }
